@@ -1,0 +1,8 @@
+Claude outputs/
+.claude/
+.impeccable/
+.vercel/
+.env
+.env.*
+.DS_Store
+Thumbs.db

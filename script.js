@@ -45,7 +45,7 @@
       note: "Servicios de ortodoncia: [POR CONFIRMAR con la clínica]." },
     { id: "periodoncia", icon: "gum", name: "Tratamiento periodontal",
       short: "Cuidado de encías con atención especializada.",
-      lead: "Diagnóstico y tratamiento de problemas de encías, con atención periodontal a cargo del Dr. Jeffry Francisco Campusano.",
+      lead: "Diagnóstico y tratamiento de problemas de encías, con atención periodontal a cargo de la Dra. Marisol Carrasco.",
       points: ["Evaluación de encías", "Tratamiento de la enfermedad periodontal", "Mantenimiento y seguimiento"] }
   ];
   const svgIcon = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[k]}</svg>`;

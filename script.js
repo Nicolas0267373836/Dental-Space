@@ -208,10 +208,34 @@
     const t = new Date(); t.setDate(t.getDate() + 1);
     date.min = t.toISOString().slice(0, 10);
 
+    // ---------- Días cerrados (panel administrativo) ----------
+    // Se cargan desde /api/disponibilidad; si la petición falla o la base
+    // de datos aún no está conectada, el formulario simplemente no bloquea
+    // ninguna fecha (no rompe el flujo existente).
+    let closedDates = {};
+    const closedNotice = document.createElement("p");
+    closedNotice.className = "err err--block closed-notice";
+    date.closest(".field").after(closedNotice);
+
+    fetch("/api/disponibilidad").then(r => r.ok ? r.json() : null).then(data => {
+      if (!data || !Array.isArray(data.overrides)) return;
+      data.overrides.forEach(o => { if (o.closed) closedDates[o.fecha] = o; });
+      const soon = new Date(); soon.setDate(soon.getDate() + 7);
+      const soonIso = soon.toISOString().slice(0, 10);
+      const next7 = data.overrides.filter(o => o.closed && o.fecha >= date.min && o.fecha <= soonIso);
+      if (next7.length) {
+        const list = next7.map(o => new Date(o.fecha + "T12:00").toLocaleDateString("es-DO", { weekday: "long", day: "numeric", month: "long" }) + (o.nota ? ` (${o.nota})` : "")).join(", ");
+        closedNotice.textContent = `Aviso: permaneceremos cerrados el ${list}.`;
+        closedNotice.classList.add("is-shown");
+      }
+      if (date.value) dateChangeCheck();
+    }).catch(() => {});
+
     const fieldOk = (input, ok) => { const f = input.closest(".field"); f.classList.toggle("is-invalid", !ok); f.classList.toggle("is-valid", ok); input.setAttribute("aria-invalid", !ok); return ok; };
     const digits = v => v.replace(/\D/g, "").length;
     const isSunday = v => v && new Date(v + "T12:00").getDay() === 0;
     const isSaturday = v => v && new Date(v + "T12:00").getDay() === 6;
+    const isClosedDay = v => !!(v && closedDates[v]);
 
     const validate = s => {
       if (s === 0) {
@@ -223,7 +247,7 @@
       }
       if (s === 1) { const ok = !!$('input[name="servicio"]:checked'); $("#svcErr").classList.toggle("is-shown", !ok); return ok; }
       if (s === 2) {
-        const okD = fieldOk(date, !!date.value && !isSunday(date.value) && date.value >= date.min);
+        const okD = fieldOk(date, !!date.value && !isSunday(date.value) && date.value >= date.min && !isClosedDay(date.value));
         const okS = !!$('input[name="horario"]:checked'); $("#slotErr").classList.toggle("is-shown", !okS);
         return okD && okS;
       }
@@ -231,12 +255,21 @@
     };
     ["#fName", "#fPhone"].forEach(s => $(s).addEventListener("blur", e => { if (e.target.value) validate(0); }));
     form.addEventListener("change", e => { if (e.target.name === "servicio") $("#svcErr").classList.remove("is-shown"); if (e.target.name === "horario") $("#slotErr").classList.remove("is-shown"); });
-    // sábado: sin horario de 3:00–6:00
-    date.addEventListener("change", () => {
+    // sábado: sin horario de 3:00–6:00; día cerrado: mensaje específico
+    function dateChangeCheck() {
       const sat = isSaturday(date.value); const l = $("[data-weekday-only]"); const r = $("input", l);
       l.classList.toggle("is-off", sat); r.disabled = sat; if (sat && r.checked) r.checked = false;
-      if (date.value) fieldOk(date, !isSunday(date.value) && date.value >= date.min);
-    });
+      const dateErr = $("#dateErr");
+      if (isClosedDay(date.value)) {
+        const o = closedDates[date.value];
+        dateErr.textContent = "La clínica no abre ese día" + (o.nota ? ` (${o.nota})` : "") + ". Elige otra fecha.";
+        fieldOk(date, false);
+      } else if (date.value) {
+        dateErr.textContent = "Elige una fecha de lunes a sábado.";
+        fieldOk(date, !isSunday(date.value) && date.value >= date.min);
+      }
+    }
+    date.addEventListener("change", dateChangeCheck);
 
     const data = () => ({
       nombre: $("#fName").value.trim(), telefono: $("#fPhone").value.trim(), ars: $("#fArs").value || "Sin seguro",
@@ -268,6 +301,13 @@
         const d = data();
         const msg = `Hola DentalSpace, quisiera solicitar una cita.\n\n• Nombre: ${d.nombre}\n• Teléfono: ${d.telefono}\n• Seguro: ${d.ars}\n• Servicio: ${d.servicio}\n• Fecha preferida: ${d.fecha}\n• Horario: ${d.horario}` + (d.comentario ? `\n• Comentario: ${d.comentario}` : "");
         $("#waSend").href = `https://wa.me/${WA}?text=${encodeURIComponent(msg)}`;
+        // Guardamos la solicitud para que la clínica la vea en su panel.
+        // Best-effort: si falla (p. ej. la base de datos aún no está
+        // conectada), no afecta el envío por WhatsApp.
+        fetch("/api/citas", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nombre: d.nombre, telefono: d.telefono, ars: d.ars, servicio: d.servicio, fecha: date.value, horario: d.horario, comentario: d.comentario })
+        }).catch(() => {});
         setTimeout(() => { form.classList.add("is-done"); show(4); steps[4].focus(); next.classList.remove("is-success"); }, 600);
       }, 1100);
     });

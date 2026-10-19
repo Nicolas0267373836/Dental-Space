@@ -1,6 +1,7 @@
 const db = require("./_lib/db");
 const { getJsonBody } = require("./_lib/http");
 const { validateAppointment } = require("./_lib/appointments");
+const availability = require("../shared/availability");
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") {
@@ -16,13 +17,17 @@ module.exports = async (req, res) => {
   try {
     const id = await db.transaction(async (c) => {
       const closed = await c.query(
-        "select closed from schedule_overrides where fecha = $1",
+        "select closed, open_time, close_time from schedule_overrides where fecha = $1",
         [a.fecha],
       );
       if (closed.rows[0]?.closed)
         throw Object.assign(new Error("La clínica no abre ese día."), {
           status: 409,
         });
+      const override = closed.rows[0];
+      if (override?.open_time && override?.close_time &&
+          !availability.slots(a.fecha, override).some(s => s.value === a.horario))
+        throw Object.assign(new Error("El horario cambió. Actualiza la fecha y elige una franja disponible."), { status: 409 });
       const r = await c.query(
         `insert into appointments (nombre,telefono,ars,servicio,fecha,horario,comentario)
         values ($1,$2,$3,$4,$5,$6,$7) returning id`,

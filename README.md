@@ -12,7 +12,9 @@ Diseño inspirado en la estructura de reodental.framer.website, adaptado a la ma
 La presentación no necesita build. El panel y el registro de solicitudes requieren las funciones de `api/`, Postgres y variables de entorno del servidor.
 
 ## Formulario de citas
-El formulario intenta registrar la solicitud en `/api/citas` y prepara el mensaje de WhatsApp para el (829) 650-7713. El envío por WhatsApp continúa funcionando si falla la API. La clínica confirma la fecha y franja disponibles.
+El formulario registra la solicitud en `/api/citas` y espera la respuesta antes de indicar que quedó registrada. Si falla el guardado, avisa que todavía no aparece en el panel y ofrece WhatsApp al (829) 650-7713. La clínica confirma la fecha y franja disponibles.
+
+La disponibilidad del panel se consulta sin caché. El formulario bloquea cierres y ajusta sus franjas a las horas especiales de cada fecha (incluidas aperturas excepcionales en domingo); los sábados terminan a las 14:00. La API vuelve a validar los horarios especiales al guardar, para rechazar una franja que cambió mientras el formulario estaba abierto. Las excepciones no cambian los textos del horario semanal habitual ni cancelan citas existentes.
 
 ## Panel administrativo
 

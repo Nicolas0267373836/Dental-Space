@@ -109,6 +109,17 @@ test("Flujo real de API con Postgres aislado", async (t) => {
         );
       },
     );
+    await t.test("Horario especial publica franjas y rechaza solicitudes obsoletas", async () => {
+      const override = { fecha: future, closed: false, nota: "Horario especial de prueba", open_time: "10:00", close_time: "13:00" };
+      assert.equal((await call("/api/admin/horario", "PUT", { overrides: [override] })).status, 200);
+      const pub = await call("/api/disponibilidad");
+      assert.match(pub.headers.get("cache-control"), /no-store/);
+      const slots = require("../shared/availability").slots(future, pub.data.overrides[0]);
+      assert.deepEqual(slots.map(s => s.range), ["10:00–12:00", "12:00–13:00"]);
+      assert.equal((await call("/api/citas", "POST", {...data, horario: "Tarde (15:00–18:00)"})).status, 409);
+      assert.equal((await call("/api/citas", "POST", {...data, horario: slots[0].value})).status, 200);
+      await call("/api/admin/horario", "PUT", { overrides: [{ fecha: future, closed: false }] });
+    });
     await t.test("Horario mixto inválido no guarda parcialmente", async () => {
       const r = await call("/api/admin/horario", "PUT", {
         overrides: [

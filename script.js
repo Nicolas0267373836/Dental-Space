@@ -198,7 +198,7 @@
     if (d.open && innerWidth <= 640) $$(".acc").forEach(o => { if (o !== d) o.open = false; });
   }));
 
-  /* ---------- Formulario de citas (simulado, sin envío de datos) ---------- */
+  /* ---------- Formulario de citas conectado al panel ---------- */
   (() => {
     const form = $("#bform"), steps = $$(".bstep", form), labels = $$(".bform__steps li", form);
     const next = $("#bNext"), back = $("#bBack"), live = $("#bLive"), bar = $("#bProgress");
@@ -212,14 +212,14 @@
     // Se cargan desde /api/disponibilidad; si la petición falla o la base
     // de datos aún no está conectada, el formulario simplemente no bloquea
     // ninguna fecha (no rompe el flujo existente).
-    let closedDates = {};
+    let overrides = {};
     const closedNotice = document.createElement("p");
     closedNotice.className = "err err--block closed-notice";
     date.closest(".field").after(closedNotice);
 
     fetch("/api/disponibilidad").then(r => r.ok ? r.json() : null).then(data => {
       if (!data || !Array.isArray(data.overrides)) return;
-      data.overrides.forEach(o => { if (o.closed) closedDates[o.fecha] = o; });
+      data.overrides.forEach(o => { overrides[o.fecha] = o; });
       const soon = new Date(); soon.setDate(soon.getDate() + 7);
       const soonIso = soon.toISOString().slice(0, 10);
       const next7 = data.overrides.filter(o => o.closed && o.fecha >= date.min && o.fecha <= soonIso);
@@ -235,7 +235,7 @@
     const digits = v => v.replace(/\D/g, "").length;
     const isSunday = v => v && new Date(v + "T12:00").getDay() === 0;
     const isSaturday = v => v && new Date(v + "T12:00").getDay() === 6;
-    const isClosedDay = v => !!(v && closedDates[v]);
+    const isClosedDay = v => !!(v && overrides[v]?.closed);
 
     const validate = s => {
       if (s === 0) {
@@ -247,26 +247,37 @@
       }
       if (s === 1) { const ok = !!$('input[name="servicio"]:checked'); $("#svcErr").classList.toggle("is-shown", !ok); return ok; }
       if (s === 2) {
-        const okD = fieldOk(date, !!date.value && !isSunday(date.value) && date.value >= date.min && !isClosedDay(date.value));
-        const okS = !!$('input[name="horario"]:checked'); $("#slotErr").classList.toggle("is-shown", !okS);
+        const slots = DentalAvailability.slots(date.value, overrides[date.value]);
+        const okD = fieldOk(date, !!date.value && date.value >= date.min && slots.length > 0);
+        const selected = $('input[name="horario"]:checked');
+        const okS = !!selected && slots.some(s => s.value === selected.value); $("#slotErr").classList.toggle("is-shown", !okS);
         return okD && okS;
       }
       return true;
     };
     ["#fName", "#fPhone"].forEach(s => $(s).addEventListener("blur", e => { if (e.target.value) validate(0); }));
     form.addEventListener("change", e => { if (e.target.name === "servicio") $("#svcErr").classList.remove("is-shown"); if (e.target.name === "horario") $("#slotErr").classList.remove("is-shown"); });
-    // sábado: sin horario de 3:00–6:00; día cerrado: mensaje específico
+    // Franjas recortadas al horario habitual o a la excepción de la fecha.
     function dateChangeCheck() {
-      const sat = isSaturday(date.value); const l = $("[data-weekday-only]"); const r = $("input", l);
-      l.classList.toggle("is-off", sat); r.disabled = sat; if (sat && r.checked) r.checked = false;
+      const previous = $('input[name="horario"]:checked')?.value;
+      const slots = DentalAvailability.slots(date.value, overrides[date.value]);
+      $("#slots").replaceChildren(...slots.map(s => {
+        const label = document.createElement("label"), input = document.createElement("input"), span = document.createElement("span"), small = document.createElement("small");
+        input.type = "radio"; input.name = "horario"; input.value = s.value; input.required = true; input.checked = previous === s.value;
+        span.textContent = s.label; small.textContent = s.range; span.append(small); label.append(input, span); return label;
+      }));
+      let notice = $("#specialHours");
+      if (!notice) { notice = document.createElement("p"); notice.id = "specialHours"; notice.setAttribute("aria-live", "polite"); $("#slots").before(notice); }
+      const override = overrides[date.value];
+      notice.textContent = override && !override.closed ? `Horario especial: ${override.open_time || "habitual"}${override.close_time ? "–" + override.close_time : ""}${override.nota ? " · " + override.nota : ""}` : "";
       const dateErr = $("#dateErr");
       if (isClosedDay(date.value)) {
-        const o = closedDates[date.value];
+        const o = overrides[date.value];
         dateErr.textContent = "La clínica no abre ese día" + (o.nota ? ` (${o.nota})` : "") + ". Elige otra fecha.";
         fieldOk(date, false);
       } else if (date.value) {
         dateErr.textContent = "Elige una fecha de lunes a sábado.";
-        fieldOk(date, !isSunday(date.value) && date.value >= date.min);
+        fieldOk(date, slots.length > 0 && date.value >= date.min);
       }
     }
     date.addEventListener("change", dateChangeCheck);
@@ -291,25 +302,37 @@
       live.textContent = s < 4 ? `Paso ${s + 1} de 4` : "Solicitud lista para enviar";
       if (!init) form.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
     };
-    next.addEventListener("click", () => {
+    next.addEventListener("click", async () => {
+      if (next.disabled) return;
       if (!validate(cur)) return;
       if (cur < 3) return show(cur + 1);
-      // simulación de envío: loading → success
+      // Esperar la confirmación real de la API antes de indicar que se guardó.
+      next.disabled = true; back.disabled = true;
       next.classList.add("is-loading"); $(".btn__label", next).textContent = "Preparando…";
-      setTimeout(() => {
-        next.classList.remove("is-loading"); next.classList.add("is-success"); $(".btn__label", next).textContent = "¡Listo!";
         const d = data();
         const msg = `Hola DentalSpace, quisiera solicitar una cita.\n\n• Nombre: ${d.nombre}\n• Teléfono: ${d.telefono}\n• Seguro: ${d.ars}\n• Servicio: ${d.servicio}\n• Fecha preferida: ${d.fecha}\n• Horario: ${d.horario}` + (d.comentario ? `\n• Comentario: ${d.comentario}` : "");
         $("#waSend").href = `https://wa.me/${WA}?text=${encodeURIComponent(msg)}`;
-        // Guardamos la solicitud para que la clínica la vea en su panel.
-        // Best-effort: si falla (p. ej. la base de datos aún no está
-        // conectada), no afecta el envío por WhatsApp.
-        fetch("/api/citas", {
+        let saved = false;
+        try {
+        const response = await fetch("/api/citas", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ nombre: d.nombre, telefono: d.telefono, ars: d.ars, servicio: d.servicio, fecha: date.value, horario: d.horario, comentario: d.comentario })
-        }).catch(() => {});
-        setTimeout(() => { form.classList.add("is-done"); show(4); steps[4].focus(); next.classList.remove("is-success"); }, 600);
-      }, 1100);
+        });
+        const result = await response.json();
+        if (response.status === 409) {
+          const fresh = await fetch("/api/disponibilidad", { cache: "no-store" }).then(r => r.json());
+          overrides = Object.fromEntries((fresh.overrides || []).map(o => [o.fecha, o]));
+          dateChangeCheck(); show(2);
+          $("#dateErr").textContent = result.error || "La disponibilidad cambió. Revisa la fecha y el horario.";
+          fieldOk(date, false);
+          return;
+        }
+        saved = response.ok && result.ok;
+        } catch (_) { /* Se ofrece WhatsApp sin afirmar que quedó registrada. */ }
+        finally { next.disabled = false; back.disabled = false; next.classList.remove("is-loading"); }
+        $("h3", steps[4]).textContent = saved ? "¡Solicitud registrada!" : "No pudimos registrar tu solicitud";
+        $("p", steps[4]).textContent = saved ? "DentalSpace ya puede verla en su panel. La clínica debe confirmar tu cita; también puedes escribir por WhatsApp." : "Todavía no aparece en el panel. Envíala por WhatsApp para que DentalSpace pueda atenderla.";
+        form.classList.add("is-done"); show(4); steps[4].focus();
     });
     back.addEventListener("click", () => cur > 0 && show(cur - 1));
     $("#bRestart").addEventListener("click", () => { form.reset(); $$(".field", form).forEach(f => f.classList.remove("is-valid", "is-invalid")); form.classList.remove("is-done"); show(0); });

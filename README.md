@@ -9,10 +9,35 @@ Diseño inspirado en la estructura de reodental.framer.website, adaptado a la ma
 - `script.js`: servicios (datos editables al inicio), modal, antes/después, carrusel, FAQ y formulario de cita
 - `images/`: fotos recortadas y optimizadas a partir del material entregado
 
-No necesita build. Abre `index.html` o súbelo a cualquier hosting estático.
+La presentación no necesita build. El panel y el registro de solicitudes requieren las funciones de `api/`, Postgres y variables de entorno del servidor.
 
 ## Formulario de citas
-No envía datos a ningún servidor. Al final arma un mensaje de WhatsApp para el (829) 650-7713 y el paciente lo envía.
+El formulario intenta registrar la solicitud en `/api/citas` y prepara el mensaje de WhatsApp para el (829) 650-7713. El envío por WhatsApp continúa funcionando si falla la API. La clínica confirma la fecha y franja disponibles.
+
+## Panel administrativo
+
+Referencia visual: WebFact1. HTML, CSS y JavaScript sin framework; backend de Vercel Functions con `pg` y Neon. El sitio público no se rediseña.
+
+- Resumen: pendientes, agenda de hoy, próximos 7 días, contactos y cierres próximos.
+- Agenda diaria/semanal; franjas preferidas, sin inventar cupos ni duraciones por servicio.
+- Solicitudes: búsqueda, filtros por estado, servicio y fechas, paginación de 12 filas, alta manual, confirmación, rechazo, atención completada, cancelación y ausencia.
+- Detalle: reprogramación, nota administrativa interna, acceso a WhatsApp y actividad persistente. No envía mensajes automáticamente.
+- Contactos agrupados por teléfono con historial de solicitudes; no es un expediente clínico. Un teléfono compartido puede agrupar varias personas.
+- Disponibilidad: calendario mensual, cierres, notas públicas y horarios excepcionales; restablecer el horario habitual elimina la excepción. Cerrar no cancela citas existentes.
+- Reportes por periodo y servicio. CSV de la vista filtrada: excluye notas y comentarios; neutraliza fórmulas de hoja de cálculo.
+- Consultas privadas con `no-store`, cookie HttpOnly de 8 horas, validación del origen en escrituras autenticadas, 6 intentos de login por IP en 15 minutos (persistentes en Postgres).
+
+El listado devuelve hasta 5,000 solicitudes recientes; si se alcanza el límite, se avisa y los reportes corresponden a ese conjunto. Los datos de contactos no se guardan en localStorage.
+
+### Datos y compatibilidad
+
+La migración es aditiva: `internal_note`, `updated_at`, `appointment_activity` y `admin_login_attempts`. Mantiene `appointments`, `schedule_overrides` y los contratos públicos. Cita e historial se guardan en una transacción; un lote inválido de horarios no guarda parcialmente. El historial no reconstruye cambios anteriores a esta versión.
+
+### Verificación local
+
+`npm ci` y `npm test` ejecutan pruebas de API e interfaz contra Postgres embebido (PGlite), sin Neon ni datos reales. `npm run dev:preview` abre `http://127.0.0.1:4381/admin/` con datos ficticios y la contraseña de demostración `DentalSpace-demo-2026`. Esta contraseña solo existe en el servidor local de prueba, no en producción. La base de prueba vive en memoria y se reinicia al apagar el servidor. `.vercelignore` excluye las herramientas de prueba del despliegue.
+
+Para cada publicación: ejecutar las pruebas, desplegar de forma explícita y repetir la verificación con la sesión real y Neon. Esta versión no añade facturación, expedientes clínicos, recordatorios automáticos ni usuarios con distintos permisos.
 
 ## Pendiente de confirmar con la clínica
 - Número de WhatsApp vigente (hoy se usa el (829) 650-7713)

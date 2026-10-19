@@ -27,7 +27,7 @@ function getPool() {
     pool = new Pool({
       connectionString: CONNECTION_STRING,
       ssl: { rejectUnauthorized: false },
-      max: 3
+      max: 3,
     });
   }
   return pool;
@@ -55,6 +55,23 @@ const SCHEMA_SQL = `
     close_time text,
     updated_at timestamptz not null default now()
   );
+
+  alter table appointments add column if not exists internal_note text not null default '';
+  alter table appointments add column if not exists updated_at timestamptz not null default now();
+  create index if not exists appointments_fecha_idx on appointments (fecha, created_at);
+  create table if not exists appointment_activity (
+    id bigint generated always as identity primary key,
+    appointment_id uuid not null references appointments(id) on delete cascade,
+    created_at timestamptz not null default now(),
+    action text not null,
+    detail text not null default ''
+  );
+  create index if not exists appointment_activity_cita_idx on appointment_activity (appointment_id, created_at);
+  create table if not exists admin_login_attempts (
+    ip text primary key,
+    attempts integer not null default 0,
+    window_start timestamptz not null default now()
+  );
 `;
 
 // gen_random_uuid() vive en pgcrypto en versiones viejas de Postgres;
@@ -74,7 +91,10 @@ async function ensureSchema() {
         /* algunas plataformas no permiten crear extensiones; no es fatal */
       }
       await p.query(SCHEMA_SQL);
-    })();
+    })().catch((err) => {
+      migrated = null;
+      throw err;
+    });
   }
   return migrated;
 }
@@ -84,4 +104,20 @@ async function query(text, params) {
   return getPool().query(text, params);
 }
 
-module.exports = { query, isConfigured, ensureSchema };
+async function transaction(fn) {
+  await ensureSchema();
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { query, transaction, isConfigured, ensureSchema };

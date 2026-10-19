@@ -18,7 +18,11 @@ function verifyPassword(password, storedHash) {
   try {
     const salt = Buffer.from(saltHex, "hex");
     const expected = Buffer.from(hashHex, "hex");
-    const derived = crypto.scryptSync(password, salt, expected.length, { N: 16384, r: 8, p: 1 });
+    const derived = crypto.scryptSync(password, salt, expected.length, {
+      N: 16384,
+      r: 8,
+      p: 1,
+    });
     return crypto.timingSafeEqual(derived, expected);
   } catch (_) {
     return false;
@@ -42,13 +46,25 @@ function verifySessionToken(token) {
   const secret = process.env.SESSION_SECRET;
   if (!secret || !token) return false;
   const [payload, sig] = String(token).split(".");
-  if (!payload || !sig) return false;
+  if (
+    !payload ||
+    !sig ||
+    !/^[0-9a-f]{64}$/.test(sig) ||
+    String(token).split(".").length !== 2
+  )
+    return false;
   const expected = sign(payload, secret);
   const sigBuf = Buffer.from(sig, "hex");
   const expectedBuf = Buffer.from(expected, "hex");
-  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) return false;
+  if (
+    sigBuf.length !== expectedBuf.length ||
+    !crypto.timingSafeEqual(sigBuf, expectedBuf)
+  )
+    return false;
   try {
-    const { exp } = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    const { exp } = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8"),
+    );
     return typeof exp === "number" && Date.now() < exp;
   } catch (_) {
     return false;
@@ -60,12 +76,16 @@ function parseCookies(req) {
   const header = req.headers && req.headers.cookie;
   const out = {};
   if (!header) return out;
-  header.split(";").forEach(pair => {
+  header.split(";").forEach((pair) => {
     const idx = pair.indexOf("=");
     if (idx === -1) return;
     const k = pair.slice(0, idx).trim();
     const v = pair.slice(idx + 1).trim();
-    out[k] = decodeURIComponent(v);
+    try {
+      out[k] = decodeURIComponent(v);
+    } catch (_) {
+      /* cookie inválida */
+    }
   });
   return out;
 }
@@ -78,13 +98,18 @@ function setSessionCookie(res, token) {
     "HttpOnly",
     "SameSite=Lax",
     `Max-Age=${SESSION_TTL_SECONDS}`,
-    secure ? "Secure" : ""
-  ].filter(Boolean).join("; ");
+    secure ? "Secure" : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
   res.setHeader("Set-Cookie", cookie);
 }
 
 function clearSessionCookie(res) {
-  res.setHeader("Set-Cookie", `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  res.setHeader(
+    "Set-Cookie",
+    `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+  );
 }
 
 function isAuthenticated(req) {
@@ -94,8 +119,22 @@ function isAuthenticated(req) {
 
 /** Devuelve true si está autenticado; si no, ya envió 401 y hay que `return`. */
 function requireAuth(req, res) {
+  res.setHeader("Cache-Control", "private, no-store");
+  if (!["GET", "HEAD"].includes(req.method) && req.headers.origin) {
+    try {
+      if (new URL(req.headers.origin).host !== req.headers.host) {
+        res.status(403).json({ ok: false, error: "Origen no permitido." });
+        return false;
+      }
+    } catch (_) {
+      res.status(403).json({ ok: false, error: "Origen no permitido." });
+      return false;
+    }
+  }
   if (isAuthenticated(req)) return true;
-  res.status(401).json({ ok: false, error: "No autorizado. Inicia sesión de nuevo." });
+  res
+    .status(401)
+    .json({ ok: false, error: "No autorizado. Inicia sesión de nuevo." });
   return false;
 }
 
@@ -106,5 +145,5 @@ module.exports = {
   setSessionCookie,
   clearSessionCookie,
   isAuthenticated,
-  requireAuth
+  requireAuth,
 };

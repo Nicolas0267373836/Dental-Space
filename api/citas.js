@@ -20,7 +20,7 @@ module.exports = async (req, res) => {
         "select closed, open_time, close_time from schedule_overrides where fecha = $1",
         [a.fecha],
       );
-      if (closed.rows[0]?.closed)
+      if (availability.closedReason(a.fecha) || closed.rows[0]?.closed)
         throw Object.assign(new Error("La clínica no abre ese día."), {
           status: 409,
         });

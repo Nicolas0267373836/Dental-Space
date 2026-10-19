@@ -37,8 +37,12 @@ test('Formulario público aplica horarios, cierres y confirma el guardado real',
     assert.equal(d.querySelectorAll('#slots input').length,0);
   } finally { w.close(); }
 });
-test('Franjas de sábado terminan a las 14:00 y una excepción puede abrir el domingo', () => {
+test('Sábados hasta las 14:00; domingos y feriados cerrados incluso con excepción', () => {
   assert.equal(availability.slots('2026-10-24').at(-1).range,'12:00–14:00');
   assert.deepEqual(availability.slots('2026-10-25'),[]);
-  assert.equal(availability.slots('2026-10-25',{open_time:'08:00',close_time:'11:00'})[0].range,'08:00–11:00');
+  assert.deepEqual(availability.slots('2026-10-25',{open_time:'08:00',close_time:'11:00'}),[]);
+  assert.deepEqual(availability.slots('2026-12-25'),[]);
+  assert.equal(availability.closedReason('2026-11-09'),'Día de la Constitución');
+  assert.equal(availability.closedReason('2026-11-06'),'');
+  assert.deepEqual(Object.keys(availability.holidays(2026)).sort(),['2026-01-01','2026-01-05','2026-01-21','2026-01-26','2026-02-27','2026-04-03','2026-05-04','2026-06-04','2026-08-16','2026-09-24','2026-11-09','2026-12-25']);
 });

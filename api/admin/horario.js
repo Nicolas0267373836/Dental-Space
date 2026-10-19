@@ -44,6 +44,8 @@ module.exports = async (req, res) => {
           });
       const open = o.closed ? "" : (o.open_time || "").trim(),
         close = o.closed ? "" : (o.close_time || "").trim();
+      if (!o.closed && (open || close || o.nota) && require("../../shared/availability").closedReason(o.fecha))
+        return res.status(400).json({ok:false, error:"Domingos y feriados: clínica cerrada. No se permite abrir esa fecha."});
       if (
         (open || close) &&
         (!time.test(open) || !time.test(close) || open >= close)

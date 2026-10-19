@@ -14,7 +14,7 @@ La presentación no necesita build. El panel y el registro de solicitudes requie
 ## Formulario de citas
 El formulario registra la solicitud en `/api/citas` y espera la respuesta antes de indicar que quedó registrada. Si falla el guardado, avisa que todavía no aparece en el panel y ofrece WhatsApp al (829) 650-7713. La clínica confirma la fecha y franja disponibles.
 
-La disponibilidad del panel se consulta sin caché. El formulario bloquea cierres y ajusta sus franjas a las horas especiales de cada fecha (incluidas aperturas excepcionales en domingo); los sábados terminan a las 14:00. La API vuelve a validar los horarios especiales al guardar, para rechazar una franja que cambió mientras el formulario estaba abierto. Las excepciones no cambian los textos del horario semanal habitual ni cancelan citas existentes.
+La disponibilidad del panel se consulta sin caché. El formulario bloquea cierres y ajusta sus franjas a las horas especiales de cada fecha (domingos y feriados nacionales dominicanos siempre cerrados); los sábados terminan a las 14:00. La API vuelve a validar los horarios especiales al guardar, para rechazar una franja que cambió mientras el formulario estaba abierto. Las excepciones no cambian los textos del horario semanal habitual ni cancelan citas existentes.
 
 ## Panel administrativo
 
@@ -48,6 +48,7 @@ Para cada publicación: ejecutar las pruebas, desplegar de forma explícita y re
 - Especialidad de la doctora: el perfil dice “General Dentist” y el uniforme dice “Ortodoncia”
 - Si ofrecen ortodoncia (marcado [POR CONFIRMAR] en el detalle de Ortopedia maxilar)
 - Foto y credenciales del Dr. Jeffry Francisco Campusano
-- Horario de domingos y feriados
 - Enlace de Instagram (`[URL DE INSTAGRAM]` en el footer)
 - Testimonios reales con autorización (hoy son placeholders)
+
+Los feriados se calculan con las reglas de traslado de la Ley 139-97 y las fechas religiosas móviles. Referencia oficial 2026: https://www.presidencia.gob.do/noticias/ministerio-de-trabajo-informa-dias-feriados-correspondientes-al-ano-2026 . Los cierres extraordinarios adicionales se registran en Disponibilidad.

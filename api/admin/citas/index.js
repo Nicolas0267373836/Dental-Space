@@ -2,6 +2,7 @@ const db = require("../../_lib/db");
 const { requireAuth } = require("../../_lib/auth");
 const { getJsonBody } = require("../../_lib/http");
 const { FIELDS, validateAppointment } = require("../../_lib/appointments");
+const availability = require("../../../shared/availability");
 module.exports = async (req, res) => {
   if (!requireAuth(req, res)) return;
   if (!db.isConfigured())
@@ -29,7 +30,7 @@ module.exports = async (req, res) => {
           "select closed from schedule_overrides where fecha = $1",
           [a.fecha],
         );
-        if (closed.rows[0]?.closed)
+        if (availability.closedReason(a.fecha) || closed.rows[0]?.closed)
           throw Object.assign(new Error("La clínica no abre ese día."), {
             status: 409,
           });

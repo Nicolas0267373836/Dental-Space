@@ -120,6 +120,15 @@ test("Flujo real de API con Postgres aislado", async (t) => {
       assert.equal((await call("/api/citas", "POST", {...data, horario: slots[0].value})).status, 200);
       await call("/api/admin/horario", "PUT", { overrides: [{ fecha: future, closed: false }] });
     });
+    await t.test("Domingos y feriados bloquean la web, el alta manual y la reapertura", async () => {
+      for (const fecha of ['2099-01-01', '2099-10-25']) {
+        assert.ok(require('../shared/availability').closedReason(fecha));
+        assert.equal((await call('/api/citas','POST',{...data,fecha})).status,409);
+        assert.equal((await call('/api/admin/citas','POST',{...data,fecha})).status,409);
+        assert.equal((await call('/api/admin/citas/'+id,'PATCH',{fecha,horario:'10:00'})).status,409);
+        assert.equal((await call('/api/admin/horario','PUT',{overrides:[{fecha,closed:false,open_time:'10:00',close_time:'12:00'}]})).status,400);
+      }
+    });
     await t.test("Horario mixto inválido no guarda parcialmente", async () => {
       const r = await call("/api/admin/horario", "PUT", {
         overrides: [

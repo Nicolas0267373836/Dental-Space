@@ -291,14 +291,14 @@
     return (
       heading(
         "Disponibilidad",
-        "Define cierres y excepciones. El horario habitual permanece como está en el sitio.",
+        "Lun–vie 9:00–18:00 · Sáb 9:00–14:00. Domingos y feriados: cerrado.",
         button("+ Excepción de horario", "schedule-new", "primary"),
       ) +
       `<div class="calendar-layout"><section class="section calendar"><div class="calendar-head">${button("←", "month-prev", "icon-button", 'aria-label="Mes anterior"')}<strong>${esc(M.date(month, { month: "long", year: "numeric" }))}</strong>${button("→", "month-next", "icon-button", 'aria-label="Mes siguiente"')}</div><div class="calendar-grid">${["L", "M", "X", "J", "V", "S", "D"].map((x) => `<span class="weekday">${x}</span>`).join("")}${"<span></span>".repeat(offset)}${Array.from(
         { length: last },
         (_, i) => {
           const iso = S.month + "-" + String(i + 1).padStart(2, "0"),
-            o = S.overrides.find((x) => x.fecha === iso);
+            o = DentalAvailability.closedReason(iso) ? {closed:true, nota:DentalAvailability.closedReason(iso)} : S.overrides.find((x) => x.fecha === iso);
           return `<button class="calendar-day ${iso === M.today() ? "is-today" : ""} ${o ? (o.closed ? "is-closed" : "is-special") : ""}" data-schedule="${iso}" aria-label="${esc(M.date(iso, { day: "numeric", month: "long" }))}${o?.closed ? ", cerrado" : o ? ", horario especial" : ""}">${i + 1}${o ? `<small>${o.closed ? "CERRADO" : "ESPECIAL"}</small>` : ""}</button>`;
         },
       ).join(
@@ -419,8 +419,16 @@
       affected = S.rows.filter((c) => c.fecha === iso && M.active(c)).length;
     open(
       "#editDialog",
-      `<form id="scheduleForm"><div class="dialog-head"><div><h2 id="editTitle">Excepción de horario</h2><p>Este ajuste se refleja en la disponibilidad pública.</p></div>${closeButton()}</div><div class="dialog-body form-grid"><div class="field"><label for="scheduleDate">Fecha</label><input id="scheduleDate" type="date" name="fecha" value="${iso}" required></div><div class="field"><label for="scheduleMode">Disponibilidad</label><select id="scheduleMode" name="mode"><option value="closed" ${o.closed ? "selected" : ""}>Clínica cerrada</option><option value="special" ${!o.closed ? "selected" : ""}>Horario especial / nota</option></select></div><div class="field wide"><label for="scheduleNote">Nota pública (máximo 80 caracteres)</label><input id="scheduleNote" name="nota" maxlength="80" value="${esc(o.nota || "")}" placeholder="Ej.: Feriado"></div><div class="field"><label for="scheduleOpen">Apertura especial</label><input id="scheduleOpen" name="open_time" type="time" value="${esc(o.open_time || "")}" ${o.closed ? "disabled" : ""}></div><div class="field"><label for="scheduleClose">Cierre especial</label><input id="scheduleClose" name="close_time" type="time" value="${esc(o.close_time || "")}" ${o.closed ? "disabled" : ""}></div><p class="muted wide">Cerrar un día bloquea nuevas solicitudes; no cancela las existentes. ${affected ? `Hay ${affected} solicitudes activas en esta fecha.` : ""}</p></div><div class="dialog-foot">${button("Restablecer horario habitual", "schedule-reset", "text-button")}<button class="primary">Guardar excepción</button></div></form>`,
+      `<form id="scheduleForm"><div class="dialog-head"><div><h2 id="editTitle">Excepción de horario</h2><p>Este ajuste se refleja en la web. Domingos y feriados: cerrado.</p></div>${closeButton()}</div><div class="dialog-body form-grid"><div class="field"><label for="scheduleDate">Fecha</label><input id="scheduleDate" type="date" name="fecha" value="${iso}" required></div><div class="field"><label for="scheduleMode">Disponibilidad</label><select id="scheduleMode" name="mode"><option value="closed" ${o.closed ? "selected" : ""}>Clínica cerrada</option><option value="special" ${!o.closed ? "selected" : ""}>Horario especial / nota</option></select></div><div class="field wide"><label for="scheduleNote">Nota pública (máximo 80 caracteres)</label><input id="scheduleNote" name="nota" maxlength="80" value="${esc(o.nota || "")}" placeholder="Ej.: Feriado"></div><div class="field"><label for="scheduleOpen">Apertura especial</label><input id="scheduleOpen" name="open_time" type="time" value="${esc(o.open_time || "")}" ${o.closed ? "disabled" : ""}></div><div class="field"><label for="scheduleClose">Cierre especial</label><input id="scheduleClose" name="close_time" type="time" value="${esc(o.close_time || "")}" ${o.closed ? "disabled" : ""}></div><p class="muted wide">Cerrar un día bloquea nuevas solicitudes; no cancela las existentes. ${affected ? `Hay ${affected} solicitudes activas en esta fecha.` : ""}</p></div><div class="dialog-foot">${button("Restablecer horario habitual", "schedule-reset", "text-button")}<button class="primary">Guardar excepción</button></div></form>`,
     );
+    lockClosedDate();
+  }
+  function lockClosedDate() {
+    const reason = DentalAvailability.closedReason($("#scheduleDate").value);
+    const mode = $("#scheduleMode");
+    $("option[value=special]", mode).disabled = Boolean(reason);
+    if (reason) mode.value = "closed";
+    $("#scheduleOpen").disabled = $("#scheduleClose").disabled = mode.value === "closed";
   }
   function exportDialog(rows) {
     if (!rows.length) {
@@ -576,6 +584,7 @@
       S[el.id] = el.value;
       render();
     }
+    if (el.id === "scheduleDate") lockClosedDate();
     if (el.id === "scheduleMode") {
       const off = el.value === "closed";
       $("#scheduleOpen").disabled = off;

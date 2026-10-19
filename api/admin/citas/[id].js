@@ -80,7 +80,7 @@ module.exports = async (req, res) => {
           "select closed from schedule_overrides where fecha = $1",
           [b.fecha || previous.fecha],
         );
-        if (closed.rows[0]?.closed)
+        if (require("../../../shared/availability").closedReason(b.fecha || previous.fecha) || closed.rows[0]?.closed)
           throw Object.assign(new Error("La clínica no abre ese día."), {
             status: 409,
           });

@@ -142,7 +142,8 @@
     const get = t => parts.find(p => p.type === t).value;
     const day = get("weekday"), h = (+get("hour") % 24) + (+get("minute")) / 60;
     const close = day === "Sat" ? 14 : day === "Sun" ? 0 : 18;
-    const open = close && h >= 9 && h < close;
+    const today = new Intl.DateTimeFormat("en-CA", {timeZone:"America/Santo_Domingo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+    const open = !DentalAvailability.closedReason(today) && close && h >= 9 && h < close;
     $("#statusDot").classList.toggle("is-open", open);
     $("#statusTitle").textContent = open ? "Abierto ahora" : "Cerrado en este momento";
     $("#statusText").textContent = open ? `Hoy hasta las ${close === 14 ? "2:00 p. m." : "6:00 p. m."}` : "Lun–Vie 9:00–6:00 · Sáb 9:00–2:00";
@@ -233,9 +234,7 @@
 
     const fieldOk = (input, ok) => { const f = input.closest(".field"); f.classList.toggle("is-invalid", !ok); f.classList.toggle("is-valid", ok); input.setAttribute("aria-invalid", !ok); return ok; };
     const digits = v => v.replace(/\D/g, "").length;
-    const isSunday = v => v && new Date(v + "T12:00").getDay() === 0;
-    const isSaturday = v => v && new Date(v + "T12:00").getDay() === 6;
-    const isClosedDay = v => !!(v && overrides[v]?.closed);
+    const isClosedDay = v => !!(v && (DentalAvailability.closedReason(v) || overrides[v]?.closed));
 
     const validate = s => {
       if (s === 0) {
@@ -272,7 +271,7 @@
       notice.textContent = override && !override.closed ? `Horario especial: ${override.open_time || "habitual"}${override.close_time ? "–" + override.close_time : ""}${override.nota ? " · " + override.nota : ""}` : "";
       const dateErr = $("#dateErr");
       if (isClosedDay(date.value)) {
-        const o = overrides[date.value];
+        const o = overrides[date.value] || {nota: DentalAvailability.closedReason(date.value)};
         dateErr.textContent = "La clínica no abre ese día" + (o.nota ? ` (${o.nota})` : "") + ". Elige otra fecha.";
         fieldOk(date, false);
       } else if (date.value) {
